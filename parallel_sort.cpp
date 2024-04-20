@@ -4,6 +4,7 @@
 #include <thread>
 #include <cassert>
 #include <random>
+#include "BS_thread_pool.hpp"
 
 template <std::ranges::random_access_range Range>
     requires std::sortable<std::ranges::iterator_t<Range>>
@@ -16,27 +17,28 @@ template <std::ranges::random_access_range Range>
     requires std::sortable<std::ranges::iterator_t<Range>>
 void sort_parallel(Range &&input_range, std::size_t num_threads = std::thread::hardware_concurrency())
 {
+    BS::thread_pool pool(num_threads);
     const auto range_size = std::ranges::size(input_range);
-    auto threads = std::vector<std::thread>(num_threads);
-
     std::vector<std::ranges::iterator_t<Range>> divided_iterators(num_threads + 1);
     divided_iterators[0] = std::ranges::begin(input_range);
     for (auto tid = std::size_t{0}; tid < num_threads; ++tid)
     {
         const auto assign_size = (tid < range_size % num_threads) ? (range_size + num_threads - 1) / num_threads : range_size / num_threads;
         divided_iterators[tid + 1] = divided_iterators[tid] + assign_size;
-        threads[tid] = std::thread(std::ranges::sort, std::ranges::subrange(divided_iterators[tid], divided_iterators[tid + 1]));
+        pool.detach_task([&divided_iterators, tid]()
+                         { std::ranges::sort(std::ranges::subrange(divided_iterators[tid], divided_iterators[tid + 1])); });
     }
-    for (auto tid = std::size_t{0}; tid < num_threads; ++tid)
-    {
-        threads[tid].join();
-    }
+    pool.wait();
     // (0,1,2) (2,3,4) (4,5,6) (6,7,8) // 4thread
     // (0+1,1+1) (2+1,3+1) 4+1
     for (auto tid = std::size_t{0}; tid < num_threads - 1; ++tid)
     {
         std::ranges::inplace_merge(std::ranges::subrange(divided_iterators[0], divided_iterators[tid + 2]), divided_iterators[tid + 1]);
     }
+    // for (auto merge_distance = 1; merge_distance * 2 < num_threads; merge_distance *= 2)
+    // {
+
+    // }
 }
 
 int main()
@@ -59,7 +61,7 @@ int main()
     std::cout << "duration_single[second]:" << duration_single / 1e6 << std::endl;
 
     auto t_parallel_begin = std::chrono::high_resolution_clock::now();
-    sort_parallel(range_parallel, 2);
+    sort_parallel(range_parallel);
     auto t_parallel_end = std::chrono::high_resolution_clock::now();
     auto duration_parallel = std::chrono::duration_cast<std::chrono::microseconds>(t_parallel_end - t_parallel_begin).count();
     std::cout << "duration_parallel[second]:" << duration_parallel / 1e6 << std::endl;
