@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "c_debug",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${fileDirname}/a.out",
+            "args": [
+                ""
+            ],
+            "cwd": "${fileDirname}",
+        }
+    ]
+}
